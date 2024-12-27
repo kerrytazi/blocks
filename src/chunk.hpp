@@ -99,11 +99,11 @@ struct Chunk
 		}
 	}
 
-	void on_render(Frame &frame, glm::ivec3 chunk_coord)
+	void on_render(Frame &frame, glm::ivec3 chunk_coord, TextureManager const &textures)
 	{
 		if (!render_cache.empty())
 		{
-			frame.add_cached(render_cache);
+			frame.add_cached(render_cache, textures.find(ItemID::Dirt));
 		}
 		else
 		{
@@ -111,7 +111,7 @@ struct Chunk
 				for (int x = 0; x < EDGE_SIZE; ++x)
 					for (int y = 0; y < EDGE_SIZE; ++y)
 						for (int z = 0; z < EDGE_SIZE; ++z)
-							blocks[x][y][z].on_render(frame, chunk_coord * (int)Chunk::EDGE_SIZE + glm::ivec3{ x, y, z });
+							blocks[x][y][z].on_render(frame, chunk_coord * (int)Chunk::EDGE_SIZE + glm::ivec3{ x, y, z }, textures);
 			});
 		}
 	}

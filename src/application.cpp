@@ -36,13 +36,14 @@ private:
 	int random_seed = 1337;
 	std::mt19937 rng{ (uint32_t)random_seed };
 
-	std::unique_ptr<Chunk> test_chunk;
 	World world;
+	TextureManager textures;
 
 #if GFXENGINE_EDITOR
 	bool editor_demo_window = false;
 	bool editor_settings = true;
 	bool editor_fps = true;
+	bool editor_stats = true;
 
 	bool editor_gfx_wireframe = false;
 	bool editor_gfx_culling = true;
@@ -55,6 +56,9 @@ private:
 
 		world.init_random_chunks(rng, {-2,-2,-2}, {2,2,2});
 
+		textures.load(ItemID::Dirt, "C:\\Users\\rav\\my\\c\\blocks\\dirt.png");
+		Frame frame;
+
 		while (true)
 		{
 			auto t1 = platform.get_time();
@@ -65,18 +69,16 @@ private:
 
 			on_update();
 
-			Frame frame;
+			frame.clear();
 			on_render(frame);
 			window->draw(frame);
-			auto t2 = platform.get_time();
-			auto t = t2 - t1;
 
 			// TODO: Calc time
 			//std::this_thread::sleep_for(std::chrono::milliseconds(300));
 		}
 	}
 
-	virtual void on_update() override
+	void on_update()
 	{
 		const double time = platform.get_time();
 
@@ -85,7 +87,7 @@ private:
 		camera_front = input_controller.calc_front_direction();
 	}
 
-	virtual void on_render(Frame &frame) override
+	void on_render(Frame &frame)
 	{
 		frame.setting_wireframe(editor_gfx_wireframe);
 		frame.setting_culling(editor_gfx_culling);
@@ -101,15 +103,39 @@ private:
 
 		frame.clear_background(Color(0.2f*255.0f, 0.3f*255.0f, 0.2f*255.0f, 1.0f*255.0f));
 
-		world.on_render(frame);
+		world.on_render(frame, textures);
 
 #if GFXENGINE_EDITOR
-		frame.on_draw_editor([this]() {
+		frame.on_draw_editor([this, &frame]() {
+			if (editor_fps)
+			{
+				ImGui::Begin("FPS", nullptr, ImGuiWindowFlags_NoNav | ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoInputs | ImGuiWindowFlags_AlwaysAutoResize);
+
+				ImGuiIO &io = ImGui::GetIO();
+				ImGui::Text("fps %6.1f   ms %6.3f", io.Framerate, 1000.0f / io.Framerate);
+
+				ImGui::SetWindowPos({ 5, 5 }, ImGuiCond_Once);
+				ImGui::End();
+			}
+
+			if (editor_stats)
+			{
+				ImGui::Begin("Stats", nullptr, ImGuiWindowFlags_NoNav | ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoInputs | ImGuiWindowFlags_AlwaysAutoResize);
+
+				ImGui::Text("vertices:  %7d", (int)frame.data.vertices.size());
+				ImGui::Text("indices:   %7d", (int)frame.data.indices.size());
+				ImGui::Text("triangles: %7d", (int)frame.data.indices.size() / 3);
+
+				ImGui::SetWindowPos({ 5, 36 }, ImGuiCond_Once);
+				ImGui::End();
+			}
+
 			if (editor_settings)
 			{
 				ImGui::Begin("Settings", &editor_settings, ImGuiWindowFlags_NoNav | ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_AlwaysAutoResize);
 
 				ImGui::Checkbox("FPS", &editor_fps);
+				ImGui::Checkbox("Stats", &editor_stats);
 				ImGui::Checkbox("Speed Up", &speed_up);
 				ImGui::Checkbox("ImGui Demo", &editor_demo_window);
 
@@ -133,19 +159,7 @@ private:
 					ImGui::Checkbox("Depth Test", &editor_gfx_depth);
 				}
 
-				ImGui::SetWindowPos({ 5, 36 }, ImGuiCond_Once);
-				ImGui::End();
-			}
-
-			if (editor_fps)
-			{
-				ImGui::Begin("Stats", nullptr, ImGuiWindowFlags_NoNav | ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoInputs | ImGuiWindowFlags_AlwaysAutoResize);
-
-				ImGuiIO &io = ImGui::GetIO();
-				ImGui::Text("fps %6.1f   ms %6.3f", io.Framerate, 1000.0f / io.Framerate);
-
-				ImGui::SetWindowSize({ 100, 20 }, ImGuiCond_Once);
-				ImGui::SetWindowPos({ 5, 5 }, ImGuiCond_Once);
+				ImGui::SetWindowPos({ 5, 67+31+3 }, ImGuiCond_Once);
 				ImGui::End();
 			}
 

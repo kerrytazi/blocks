@@ -10,10 +10,10 @@ struct World
 {
 	std::unordered_map<glm::ivec3, std::unique_ptr<Chunk>> chunks;
 
-	void on_render(Frame &frame)
+	void on_render(Frame &frame, TextureManager const &textures)
 	{
 		for (auto &chunk : chunks)
-			chunk.second->on_render(frame, chunk.first);
+			chunk.second->on_render(frame, chunk.first, textures);
 	}
 
 	void init_random_chunks(std::mt19937 &rng, glm::ivec3 from, glm::ivec3 to)
@@ -38,6 +38,7 @@ struct World
 								for (int _z = 0; _z < Chunk::EDGE_SIZE; ++_z)
 								{
 									chunk->blocks[_x][_y][_z].solid = true;
+									chunk->blocks[_x][_y][_z].id = ItemID::Dirt;
 								}
 							}
 						}
@@ -51,6 +52,7 @@ struct World
 							int _z = dist(rng);
 
 							chunk->blocks[_x][_y][_z].solid = true;
+							chunk->blocks[_x][_y][_z].id = ItemID::Dirt;
 						}
 					}
 
