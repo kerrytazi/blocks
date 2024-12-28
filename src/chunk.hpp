@@ -1,5 +1,7 @@
 #pragma once
 
+#include "gfxengine/graphics.hpp"
+
 #include "block.hpp"
 #include <vector>
 
@@ -13,6 +15,8 @@ struct Chunk
 
 	void refresh_visible_faces()
 	{
+		render_cache.clear();
+
 		for (int x = 0; x < EDGE_SIZE; ++x)
 		{
 			for (int y = 0; y < EDGE_SIZE; ++y)
@@ -50,6 +54,8 @@ struct Chunk
 
 	void hide_adjacent_chunk_faces(glm::ivec3 delta, Chunk const &other)
 	{
+		render_cache.clear();
+
 		if (delta.x < 0)
 		{
 			for (int y = 0; y < EDGE_SIZE; ++y)
@@ -113,6 +119,14 @@ struct Chunk
 						for (int z = 0; z < EDGE_SIZE; ++z)
 							blocks[x][y][z].on_render(frame, chunk_coord * (int)Chunk::EDGE_SIZE + glm::ivec3{ x, y, z }, textures);
 			});
+		}
+	}
+
+	void cache_graphics(Graphics &graphics)
+	{
+		if (!render_cache.empty() && !render_cache.graphics_cache)
+		{
+			graphics.cache(render_cache);
 		}
 	}
 };

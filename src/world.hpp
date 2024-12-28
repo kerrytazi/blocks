@@ -16,8 +16,15 @@ struct World
 			chunk.second->on_render(frame, chunk.first, textures);
 	}
 
+	void cache_graphics(Graphics &graphics)
+	{
+		for (auto &chunk : chunks)
+			chunk.second->cache_graphics(graphics);
+	}
+
 	void init_random_chunks(std::mt19937 &rng, glm::ivec3 from, glm::ivec3 to)
 	{
+		chunks.clear();
 		std::uniform_int_distribution<std::mt19937::result_type> dist(0, Chunk::EDGE_SIZE - 1);
 
 		for (int x = from.x; x < to.x; ++x)

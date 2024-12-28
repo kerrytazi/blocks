@@ -10,6 +10,12 @@ enum class ItemID : uint8_t
 	Dirt,
 };
 
+struct Graphics;
+
+struct RenderParams
+{
+};
+
 struct TextureManager
 {
 	std::unordered_map<ItemID, std::shared_ptr<Image>> textures;

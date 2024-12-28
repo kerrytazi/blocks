@@ -4,6 +4,7 @@
 #include "gfxengine/input_controller.hpp"
 #include "gfxengine/platform.hpp"
 #include "gfxengine/window.hpp"
+#include "gfxengine/graphics.hpp"
 #include "gfxengine/frame.hpp"
 #include "gfxengine/window_event_handler.hpp"
 
@@ -15,13 +16,13 @@
 #include "imgui.h"
 #endif // GFXENGINE_EDITOR
 
-class Application : public BaseApplication, public WindowEventHandler
+class BlocksApplication : public Application, public WindowEventHandler
 {
 private:
 
-	BasePlatform &platform;
+	Platform &platform;
 
-	std::unique_ptr<BaseWindow> window;
+	std::unique_ptr<Window> window;
 
 	bool should_close = false;
 	bool mouse_locked = false;
@@ -33,6 +34,7 @@ private:
 
 	InputController input_controller;
 
+	int world_radius = 2;
 	int random_seed = 1337;
 	std::mt19937 rng{ (uint32_t)random_seed };
 
@@ -54,9 +56,9 @@ private:
 	{
 		window->set_vsync(false);
 
-		world.init_random_chunks(rng, {-2,-2,-2}, {2,2,2});
+		world.init_random_chunks(rng, {-world_radius,-world_radius,-world_radius}, {world_radius,world_radius,world_radius});
 
-		textures.load(ItemID::Dirt, "C:\\Users\\rav\\my\\c\\blocks\\dirt.png");
+		textures.load(ItemID::Dirt, "dirt.png");
 		Frame frame;
 
 		while (true)
@@ -93,7 +95,7 @@ private:
 		frame.setting_culling(editor_gfx_culling);
 		frame.setting_depth(editor_gfx_depth);
 
-		const glm::mat4 proj = glm::perspective(glm::radians(camera_fov), 1.0f, 0.1f, 100.0f);
+		const glm::mat4 proj = glm::perspective(glm::radians(camera_fov), 1.0f, 0.01f, 1000.0f);
 		const glm::mat4 view = glm::lookAt(camera_pos, camera_pos + camera_front, glm::vec3(0, 1, 0));
 		const glm::mat4 model = glm::identity<glm::mat4>();
 
@@ -104,9 +106,13 @@ private:
 		frame.clear_background(Color(0.2f*255.0f, 0.3f*255.0f, 0.2f*255.0f, 1.0f*255.0f));
 
 		world.on_render(frame, textures);
+		world.cache_graphics(window->get_graphics());
 
 #if GFXENGINE_EDITOR
 		frame.on_draw_editor([this, &frame]() {
+
+			ImVec2 _pos{ 5, 5 };
+
 			if (editor_fps)
 			{
 				ImGui::Begin("FPS", nullptr, ImGuiWindowFlags_NoNav | ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoInputs | ImGuiWindowFlags_AlwaysAutoResize);
@@ -114,19 +120,30 @@ private:
 				ImGuiIO &io = ImGui::GetIO();
 				ImGui::Text("fps %6.1f   ms %6.3f", io.Framerate, 1000.0f / io.Framerate);
 
-				ImGui::SetWindowPos({ 5, 5 }, ImGuiCond_Once);
+				ImGui::SetWindowPos(_pos, ImGuiCond_Always);
+				_pos.y += ImGui::GetWindowSize().y + 5;
 				ImGui::End();
 			}
 
 			if (editor_stats)
 			{
-				ImGui::Begin("Stats", nullptr, ImGuiWindowFlags_NoNav | ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoInputs | ImGuiWindowFlags_AlwaysAutoResize);
+				auto stats = frame.get_stats();
 
-				ImGui::Text("vertices:  %7d", (int)frame.data.vertices.size());
-				ImGui::Text("indices:   %7d", (int)frame.data.indices.size());
-				ImGui::Text("triangles: %7d", (int)frame.data.indices.size() / 3);
+				ImGui::Begin("Frame Stats", nullptr, ImGuiWindowFlags_NoNav | ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoInputs | ImGuiWindowFlags_AlwaysAutoResize);
 
-				ImGui::SetWindowPos({ 5, 36 }, ImGuiCond_Once);
+				ImGui::Text("draw calls:      %7d", (int)stats.draw_calls);
+				ImGui::Text("api calls:       %7d", (int)stats.api_calls);
+
+				ImGui::Text("vertices:        %7d", (int)stats.vertices);
+				ImGui::Text("indices:         %7d", (int)stats.indices);
+				ImGui::Text("triangles:       %7d", (int)stats.indices / 3);
+
+				ImGui::Text("cache vertices:  %7d", (int)stats.cache_vertices);
+				ImGui::Text("cache indices:   %7d", (int)stats.cache_indices);
+				ImGui::Text("cache triangles: %7d", (int)stats.cache_indices / 3);
+
+				ImGui::SetWindowPos(_pos, ImGuiCond_Always);
+				_pos.y += ImGui::GetWindowSize().y + 5;
 				ImGui::End();
 			}
 
@@ -144,12 +161,17 @@ private:
 				ImGui::PopItemWidth();
 				ImGui::PushItemWidth(80);
 				ImGui::InputInt("Random Seed", &random_seed, 0);
+				ImGui::InputInt("World Radius", &world_radius, 0);
 				ImGui::PopItemWidth();
 
 				if (ImGui::Button("Generate Random Chunks"))
 				{
-					rng.seed(random_seed);
-					world.init_random_chunks(rng, {-2,-2,-2}, {2,2,2});
+					if (random_seed == -1)
+						rng.seed(rng());
+					else
+						rng.seed(random_seed);
+
+					world.init_random_chunks(rng, {-world_radius,-world_radius,-world_radius}, {world_radius,world_radius,world_radius});
 				}
 
 				if (ImGui::CollapsingHeader("Graphics"))
@@ -159,7 +181,8 @@ private:
 					ImGui::Checkbox("Depth Test", &editor_gfx_depth);
 				}
 
-				ImGui::SetWindowPos({ 5, 67+31+3 }, ImGuiCond_Once);
+				ImGui::SetWindowPos(_pos, ImGuiCond_Always);
+				_pos.y += ImGui::GetWindowSize().y + 5;
 				ImGui::End();
 			}
 
@@ -265,7 +288,7 @@ private:
 
 public:
 
-	Application(BasePlatform &platform)
+	BlocksApplication(Platform &platform)
 		: platform{ platform }
 	{
 		CreateWindowParams params{ platform };
@@ -279,7 +302,7 @@ public:
 	}
 };
 
-std::unique_ptr<BaseApplication> create_application(BasePlatform &platform)
+std::unique_ptr<Application> create_application(Platform &platform)
 {
-	return std::make_unique<Application>(platform);
+	return std::make_unique<BlocksApplication>(platform);
 }
