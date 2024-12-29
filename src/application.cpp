@@ -36,6 +36,7 @@ private:
 
 	int world_radius = 2;
 	int random_seed = 1337;
+	int random_count = 400;
 	std::mt19937 rng{ (uint32_t)random_seed };
 
 	World world;
@@ -45,18 +46,21 @@ private:
 	bool editor_demo_window = false;
 	bool editor_settings = true;
 	bool editor_fps = true;
+	bool editor_coord = true;
 	bool editor_stats = true;
 
 	bool editor_gfx_wireframe = false;
 	bool editor_gfx_culling = true;
 	bool editor_gfx_depth = true;
+
+	bool editor_window_vsync = true;
 #endif // GFXENGINE_EDITOR
 
 	virtual void start() override
 	{
 		window->set_vsync(false);
 
-		world.init_random_chunks(rng, {-world_radius,-world_radius,-world_radius}, {world_radius,world_radius,world_radius});
+		world.init_random_chunks(rng, {-world_radius,-world_radius,-world_radius}, {world_radius,world_radius,world_radius}, random_count);
 
 		textures.load(ItemID::Dirt, "dirt.png");
 		Frame frame;
@@ -76,7 +80,8 @@ private:
 			window->draw(frame);
 
 			// TODO: Calc time
-			//std::this_thread::sleep_for(std::chrono::milliseconds(300));
+			if (editor_window_vsync)
+				std::this_thread::sleep_for(std::chrono::milliseconds(7));
 		}
 	}
 
@@ -125,6 +130,25 @@ private:
 				ImGui::End();
 			}
 
+			if (editor_coord)
+			{
+				ImGui::Begin("Coords", nullptr, ImGuiWindowFlags_NoNav | ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoInputs | ImGuiWindowFlags_AlwaysAutoResize);
+
+				glm::vec3 pos = input_controller.position;
+				glm::ivec3 chunk = glm::floor(pos / 16.0f);
+				glm::vec3 lpos = pos - glm::vec3(chunk) * 16.0f;
+				glm::vec2 rot = input_controller.rotation;
+
+				ImGui::Text("pos   %6.2f %6.2f %6.2f", pos.x, pos.y, pos. z);
+				ImGui::Text("chunk %3d    %3d    %3d", chunk.x, chunk.y, chunk.z);
+				ImGui::Text("lpos  %6.2f %6.2f %6.2f", lpos.x, lpos.y, lpos.z);
+				ImGui::Text("rot   %6.2f %6.2f", rot.x, rot.y);
+
+				ImGui::SetWindowPos(_pos, ImGuiCond_Always);
+				_pos.y += ImGui::GetWindowSize().y + 5;
+				ImGui::End();
+			}
+
 			if (editor_stats)
 			{
 				auto stats = frame.get_stats();
@@ -152,6 +176,7 @@ private:
 				ImGui::Begin("Settings", &editor_settings, ImGuiWindowFlags_NoNav | ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_AlwaysAutoResize);
 
 				ImGui::Checkbox("FPS", &editor_fps);
+				ImGui::Checkbox("Coords", &editor_coord);
 				ImGui::Checkbox("Stats", &editor_stats);
 				ImGui::Checkbox("Speed Up", &speed_up);
 				ImGui::Checkbox("ImGui Demo", &editor_demo_window);
@@ -162,6 +187,7 @@ private:
 				ImGui::PushItemWidth(80);
 				ImGui::InputInt("Random Seed", &random_seed, 0);
 				ImGui::InputInt("World Radius", &world_radius, 0);
+				ImGui::InputInt("Blocks per Chunk", &random_count, 0);
 				ImGui::PopItemWidth();
 
 				if (ImGui::Button("Generate Random Chunks"))
@@ -171,7 +197,7 @@ private:
 					else
 						rng.seed(random_seed);
 
-					world.init_random_chunks(rng, {-world_radius,-world_radius,-world_radius}, {world_radius,world_radius,world_radius});
+					world.init_random_chunks(rng, {-world_radius,-world_radius,-world_radius}, {world_radius,world_radius,world_radius}, random_count);
 				}
 
 				if (ImGui::CollapsingHeader("Graphics"))
@@ -179,6 +205,14 @@ private:
 					ImGui::Checkbox("Wireframe", &editor_gfx_wireframe);
 					ImGui::Checkbox("Culling", &editor_gfx_culling);
 					ImGui::Checkbox("Depth Test", &editor_gfx_depth);
+				}
+
+				if (ImGui::CollapsingHeader("Window"))
+				{
+					if (ImGui::Checkbox("vsync", &editor_window_vsync))
+					{
+						//window->set_vsync(editor_window_vsync);
+					}
 				}
 
 				ImGui::SetWindowPos(_pos, ImGuiCond_Always);
@@ -222,35 +256,28 @@ private:
 
 		if (mouse_locked && event.locked)
 		{
-			if (event.type == KeyboardEvent::Type::Press && event.key == KeyboardEvent::Key::W)
-				input_controller.begin_move(time, InputController::Direction::Forward);
-			if (event.type == KeyboardEvent::Type::Release && event.key == KeyboardEvent::Key::W)
-				input_controller.end_move(time, InputController::Direction::Forward);
+			struct KeyDir
+			{
+				KeyboardEvent::Key key;
+				InputController::Direction direction;
+			};
 
-			if (event.type == KeyboardEvent::Type::Press && event.key == KeyboardEvent::Key::S)
-				input_controller.begin_move(time, InputController::Direction::Back);
-			if (event.type == KeyboardEvent::Type::Release && event.key == KeyboardEvent::Key::S)
-				input_controller.end_move(time, InputController::Direction::Back);
+			KeyDir key_dirs[] {
+				{ KeyboardEvent::Key::W, InputController::Direction::Forward },
+				{ KeyboardEvent::Key::S, InputController::Direction::Back },
+				{ KeyboardEvent::Key::D, InputController::Direction::Right },
+				{ KeyboardEvent::Key::A, InputController::Direction::Left },
+				{ KeyboardEvent::Key::Space, InputController::Direction::Up },
+				{ KeyboardEvent::Key::LeftShift, InputController::Direction::Down },
+			};
 
-			if (event.type == KeyboardEvent::Type::Press && event.key == KeyboardEvent::Key::D)
-				input_controller.begin_move(time, InputController::Direction::Right);
-			if (event.type == KeyboardEvent::Type::Release && event.key == KeyboardEvent::Key::D)
-				input_controller.end_move(time, InputController::Direction::Right);
-
-			if (event.type == KeyboardEvent::Type::Press && event.key == KeyboardEvent::Key::A)
-				input_controller.begin_move(time, InputController::Direction::Left);
-			if (event.type == KeyboardEvent::Type::Release && event.key == KeyboardEvent::Key::A)
-				input_controller.end_move(time, InputController::Direction::Left);
-
-			if (event.type == KeyboardEvent::Type::Press && event.key == KeyboardEvent::Key::Space)
-				input_controller.begin_move(time, InputController::Direction::Up);
-			if (event.type == KeyboardEvent::Type::Release && event.key == KeyboardEvent::Key::Space)
-				input_controller.end_move(time, InputController::Direction::Up);
-
-			if (event.type == KeyboardEvent::Type::Press && event.key == KeyboardEvent::Key::LeftShift)
-				input_controller.begin_move(time, InputController::Direction::Down);
-			if (event.type == KeyboardEvent::Type::Release && event.key == KeyboardEvent::Key::LeftShift)
-				input_controller.end_move(time, InputController::Direction::Down);
+			for (auto key_dir : key_dirs)
+			{
+				if (event.type == KeyboardEvent::Type::Press && event.key == key_dir.key)
+					input_controller.begin_move(time, key_dir.direction);
+				if (event.type == KeyboardEvent::Type::Release && event.key == key_dir.key)
+					input_controller.end_move(time, key_dir.direction);
+			}
 		}
 	}
 
@@ -295,8 +322,8 @@ public:
 		params.window_event_handler = this;
 		window = platform.create_window(params);
 
-		input_controller.position = { 3.0f, 3.0f, 3.0f };
-		input_controller.rotation = { -45.0f, -135.0f };
+		input_controller.position = { -35.0f, -35.0f, -35.0f };
+		input_controller.rotation = { 45.0f, -315.0f };
 		input_controller.change_speed(0.0, 4.0f);
 		input_controller.change_rotation_sensitivity(0.0, 0.1f);
 	}

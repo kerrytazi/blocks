@@ -40,8 +40,8 @@ enum class Direction : uint8_t
 	Right,       // +x (east)
 	Down,        // -y
 	Up,          // +y
-	Forward,     // -z (north)
-	Back,        // +z (south)
+	Back,        // -z (north)
+	Forward,     // +z (south)
 };
 
 static inline const size_t DIRECTION_MAX = 6;

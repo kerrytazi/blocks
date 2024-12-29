@@ -7,7 +7,9 @@ project(blocks VERSION 0.1 LANGUAGES CXX)
 set(PROJECT_SOURCES
 	src/application.cpp
 	src/block.hpp
+	src/chunk.cpp
 	src/chunk.hpp
+	src/world.cpp
 	src/world.hpp
 )
 
