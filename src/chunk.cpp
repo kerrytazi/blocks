@@ -3,6 +3,7 @@
 void Chunk::refresh_visible_faces()
 {
 	render_cache.clear();
+	graphics_cache_dirty = true;
 
 	for (int x = 0; x < EDGE_SIZE; ++x)
 	{
@@ -42,6 +43,7 @@ void Chunk::refresh_visible_faces()
 void Chunk::hide_adjacent_chunk_faces(glm::ivec3 delta, Chunk const &other)
 {
 	render_cache.clear();
+	graphics_cache_dirty = true;
 
 	if (delta.x < 0)
 	{
@@ -96,11 +98,11 @@ void Chunk::on_render(Frame &frame, glm::ivec3 chunk_coord, TextureManager const
 {
 	if (!render_cache.empty())
 	{
-		frame.add_cached(render_cache, textures.find(ItemID::Dirt));
+		frame.add_cached(render_cache, graphics_cache, textures.find(ItemID::Dirt));
 	}
 	else
 	{
-		render_cache = frame.cached([&]() {
+		frame.cached(render_cache, [&]() {
 			if (greedy_meshing)
 			{
 				// Left
@@ -404,8 +406,9 @@ void Chunk::on_render(Frame &frame, glm::ivec3 chunk_coord, TextureManager const
 
 void Chunk::cache_graphics(Graphics &graphics)
 {
-	if (!render_cache.empty() && !render_cache.graphics_cache)
+	if (!render_cache.empty() && graphics_cache_dirty)
 	{
-		graphics.cache(render_cache);
+		graphics.cache(render_cache, graphics_cache);
+		graphics_cache_dirty = false;
 	}
 }

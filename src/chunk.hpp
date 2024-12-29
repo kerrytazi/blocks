@@ -13,7 +13,9 @@ struct Chunk
 
 	bool greedy_meshing = true;
 
-	FrameCache render_cache;
+	bool graphics_cache_dirty = false;
+	std::shared_ptr<FrameCacheGraphicsCache> graphics_cache;
+	FrameCache render_cache = FrameCache::with_reserve(32 * 1024);
 
 	void refresh_visible_faces();
 	void hide_adjacent_chunk_faces(glm::ivec3 delta, Chunk const &other);

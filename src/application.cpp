@@ -8,8 +8,6 @@
 #include "gfxengine/frame.hpp"
 #include "gfxengine/window_event_handler.hpp"
 
-#include <chrono>
-#include <thread>
 #include <random>
 
 #if GFXENGINE_EDITOR
@@ -23,6 +21,8 @@ private:
 	Platform &platform;
 
 	std::unique_ptr<Window> window;
+
+	int fps_limit = 120;
 
 	bool should_close = false;
 	bool mouse_locked = false;
@@ -53,12 +53,17 @@ private:
 	bool editor_gfx_culling = true;
 	bool editor_gfx_depth = true;
 
-	bool editor_window_vsync = true;
+	bool editor_window_vsync = false;
+	int editor_window_fps_limit = fps_limit;
 #endif // GFXENGINE_EDITOR
 
 	virtual void start() override
 	{
+#if GFXENGINE_EDITOR
+		window->set_vsync(editor_window_vsync);
+#else
 		window->set_vsync(false);
+#endif // GFXENGINE_EDITOR
 
 		world.init_random_chunks(rng, {-world_radius,-world_radius,-world_radius}, {world_radius,world_radius,world_radius}, random_count);
 
@@ -79,9 +84,16 @@ private:
 			on_render(frame);
 			window->draw(frame);
 
-			// TODO: Calc time
-			if (editor_window_vsync)
-				std::this_thread::sleep_for(std::chrono::milliseconds(7));
+			auto t2 = platform.get_time();
+
+			if (fps_limit != 0)
+			{
+				double max_frame_time = 1.0 / fps_limit;
+				double delta = t2 - t1 + 0.0002;
+
+				if (max_frame_time > delta)
+					platform.sleep(max_frame_time - delta);
+			}
 		}
 	}
 
@@ -211,8 +223,14 @@ private:
 				{
 					if (ImGui::Checkbox("vsync", &editor_window_vsync))
 					{
-						//window->set_vsync(editor_window_vsync);
+						window->set_vsync(editor_window_vsync);
 					}
+
+					ImGui::PushItemWidth(80);
+					ImGui::InputInt("FPS Limit", &editor_window_fps_limit, 0);
+					if (ImGui::IsItemDeactivatedAfterEdit())
+						fps_limit = editor_window_fps_limit;
+					ImGui::PopItemWidth();
 				}
 
 				ImGui::SetWindowPos(_pos, ImGuiCond_Always);
