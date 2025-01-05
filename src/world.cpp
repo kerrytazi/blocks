@@ -1,5 +1,7 @@
 #include "world.hpp"
 
+#include "gfxengine/noise_generator.hpp"
+
 void World::on_render(Frame &frame, TextureManager const &textures)
 {
 	for (auto &chunk : chunks)
@@ -12,7 +14,7 @@ void World::cache_graphics(Graphics &graphics)
 		chunk.second->cache_graphics(graphics);
 }
 
-void World::init_random_chunks(std::mt19937 &rng, glm::ivec3 from, glm::ivec3 to, int count)
+void World::init_random_chunks(std::mt19937 &rng, ivec3 from, ivec3 to, int count)
 {
 	chunks.clear();
 	std::uniform_int_distribution<std::mt19937::result_type> dist(0, Chunk::EDGE_SIZE - 1);
@@ -23,7 +25,7 @@ void World::init_random_chunks(std::mt19937 &rng, glm::ivec3 from, glm::ivec3 to
 		{
 			for (int z = from.z; z < to.z; ++z)
 			{
-				auto &chunk = chunks.emplace(glm::ivec3{ x, y, z }, std::make_unique<Chunk>()).first->second;
+				auto &chunk = chunks.emplace(ivec3{ x, y, z }, std::make_unique<Chunk>()).first->second;
 
 				if (0)
 				{
@@ -59,7 +61,51 @@ void World::init_random_chunks(std::mt19937 &rng, glm::ivec3 from, glm::ivec3 to
 
 	for (auto &chunk : chunks)
 	{
-		static const glm::ivec3 directions[DIRECTION_MAX]{ {-1,0,0}, {1,0,0}, {0,-1,0}, {0,1,0}, {0,0,-1}, {0,0,1} };
+		static const ivec3 directions[DIRECTION_MAX]{ {-1,0,0}, {1,0,0}, {0,-1,0}, {0,1,0}, {0,0,-1}, {0,0,1} };
+
+		for (auto direction : directions)
+			if (auto it = chunks.find(chunk.first + direction); it != chunks.end())
+				chunk.second->hide_adjacent_chunk_faces(direction, *it->second);
+	}
+}
+
+void World::init(NoiseGenerator const &gen, ivec3 from, ivec3 to)
+{
+	chunks.clear();
+
+	for (int x = from.x; x < to.x; ++x)
+	{
+		for (int z = from.x; z < to.z; ++z)
+		{
+			int y = 0;
+			auto &chunk = chunks.emplace(ivec3{ x, y, z }, std::make_unique<Chunk>()).first->second;
+
+			for (int _x = 0; _x < Chunk::EDGE_SIZE; ++_x)
+			{
+				for (int _z = 0; _z < Chunk::EDGE_SIZE; ++_z)
+				{
+					double val = (
+						(gen.noise((x * (int)Chunk::EDGE_SIZE + _x) / 64.0, (z * (int)Chunk::EDGE_SIZE + _z) / 64.0) + 1) / 2 * 1.00 +
+						(gen.noise((x * (int)Chunk::EDGE_SIZE + _x) / 32.0, (z * (int)Chunk::EDGE_SIZE + _z) / 32.0) + 1) / 2 * 0.50 +
+						(gen.noise((x * (int)Chunk::EDGE_SIZE + _x) / 16.0, (z * (int)Chunk::EDGE_SIZE + _z) / 16.0) + 1) / 2 * 0.25
+						) / 1.75;
+					int height = val * 15 + 1;
+
+					for (int _y = 0; _y < height; ++_y)
+					{
+						chunk->blocks[_x][_y][_z].solid = true;
+						chunk->blocks[_x][_y][_z].id = ItemID::Dirt;
+					}
+				}
+			}
+
+			chunk->refresh_visible_faces();
+		}
+	}
+
+	for (auto &chunk : chunks)
+	{
+		static const ivec3 directions[DIRECTION_MAX]{ {-1,0,0}, {1,0,0}, {0,-1,0}, {0,1,0}, {0,0,-1}, {0,0,1} };
 
 		for (auto direction : directions)
 			if (auto it = chunks.find(chunk.first + direction); it != chunks.end())

@@ -40,7 +40,7 @@ void Chunk::refresh_visible_faces()
 	}
 }
 
-void Chunk::hide_adjacent_chunk_faces(glm::ivec3 delta, Chunk const &other)
+void Chunk::hide_adjacent_chunk_faces(ivec3 delta, Chunk const &other)
 {
 	render_cache.clear();
 	graphics_cache_dirty = true;
@@ -94,7 +94,7 @@ void Chunk::hide_adjacent_chunk_faces(glm::ivec3 delta, Chunk const &other)
 	}
 }
 
-void Chunk::on_render(Frame &frame, glm::ivec3 chunk_coord, TextureManager const &textures)
+void Chunk::on_render(Frame &frame, ivec3 chunk_coord, TextureManager const &textures)
 {
 	if (!render_cache.empty())
 	{
@@ -144,9 +144,9 @@ void Chunk::on_render(Frame &frame, glm::ivec3 chunk_coord, TextureManager const
 									meshed[z2][y2] = true;
 
 							{
-								glm::ivec3 p = chunk_coord * (int)Chunk::EDGE_SIZE + glm::ivec3{ x, y, z };
-								glm::ivec3 e = chunk_coord * (int)Chunk::EDGE_SIZE + glm::ivec3{ x, ey, ez };
-								glm::vec2 s = { ez - z, ey - y };
+								ivec3 p = chunk_coord * (int)Chunk::EDGE_SIZE + ivec3{ x, y, z };
+								ivec3 e = chunk_coord * (int)Chunk::EDGE_SIZE + ivec3{ x, ey, ez };
+								vec2 s = { ez - z, ey - y };
 								frame.add_quad({ p.x, p.y, p.z }, { p.x, p.y, e.z }, { p.x, e.y, e.z }, { p.x, e.y, p.z }, Color::RED, textures.find(ItemID::Dirt), { 0.0f, s.y }, { s.x, s.y }, { s.x, 0.0f }, { 0.0f, 0.0f });
 							}
 						}
@@ -192,9 +192,9 @@ void Chunk::on_render(Frame &frame, glm::ivec3 chunk_coord, TextureManager const
 									meshed[z2][y2] = true;
 
 							{
-								glm::ivec3 p = chunk_coord * (int)Chunk::EDGE_SIZE + glm::ivec3{ x+1, y, z };
-								glm::ivec3 e = chunk_coord * (int)Chunk::EDGE_SIZE + glm::ivec3{ x+1, ey, ez };
-								glm::vec2 s = { ez - z, ey - y };
+								ivec3 p = chunk_coord * (int)Chunk::EDGE_SIZE + ivec3{ x+1, y, z };
+								ivec3 e = chunk_coord * (int)Chunk::EDGE_SIZE + ivec3{ x+1, ey, ez };
+								vec2 s = { ez - z, ey - y };
 								frame.add_quad({ p.x, p.y, e.z }, { p.x, p.y, p.z }, { p.x, e.y, p.z }, { p.x, e.y, e.z }, Color::YELLOW, textures.find(ItemID::Dirt), { 0.0f, s.y }, { s.x, s.y }, { s.x, 0.0f }, { 0.0f, 0.0f });
 							}
 						}
@@ -240,9 +240,9 @@ void Chunk::on_render(Frame &frame, glm::ivec3 chunk_coord, TextureManager const
 									meshed[x2][z2] = true;
 
 							{
-								glm::ivec3 p = chunk_coord * (int)Chunk::EDGE_SIZE + glm::ivec3{ x, y, z };
-								glm::ivec3 e = chunk_coord * (int)Chunk::EDGE_SIZE + glm::ivec3{ ex, y, ez };
-								glm::vec2 s = { ex - x, ez - z };
+								ivec3 p = chunk_coord * (int)Chunk::EDGE_SIZE + ivec3{ x, y, z };
+								ivec3 e = chunk_coord * (int)Chunk::EDGE_SIZE + ivec3{ ex, y, ez };
+								vec2 s = { ex - x, ez - z };
 								frame.add_quad({ p.x, p.y, p.z }, { e.x, p.y, p.z }, { e.x, p.y, e.z }, { p.x, p.y, e.z }, Color::BLUE, textures.find(ItemID::Dirt), { 0.0f, s.y }, { s.x, s.y }, { s.x, 0.0f }, { 0.0f, 0.0f });
 							}
 						}
@@ -288,9 +288,9 @@ void Chunk::on_render(Frame &frame, glm::ivec3 chunk_coord, TextureManager const
 									meshed[x2][z2] = true;
 
 							{
-								glm::ivec3 p = chunk_coord * (int)Chunk::EDGE_SIZE + glm::ivec3{ x, y+1, z };
-								glm::ivec3 e = chunk_coord * (int)Chunk::EDGE_SIZE + glm::ivec3{ ex, y+1, ez };
-								glm::vec2 s = { ex - x, ez - z };
+								ivec3 p = chunk_coord * (int)Chunk::EDGE_SIZE + ivec3{ x, y+1, z };
+								ivec3 e = chunk_coord * (int)Chunk::EDGE_SIZE + ivec3{ ex, y+1, ez };
+								vec2 s = { ex - x, ez - z };
 								frame.add_quad({ p.x, p.y, e.z }, { e.x, p.y, e.z }, { e.x, p.y, p.z }, { p.x, p.y, p.z }, Color::MAGENTA, textures.find(ItemID::Dirt), { 0.0f, s.y }, { s.x, s.y }, { s.x, 0.0f }, { 0.0f, 0.0f });
 							}
 						}
@@ -336,9 +336,9 @@ void Chunk::on_render(Frame &frame, glm::ivec3 chunk_coord, TextureManager const
 									meshed[x2][y2] = true;
 
 							{
-								glm::ivec3 p = chunk_coord * (int)Chunk::EDGE_SIZE + glm::ivec3{ x, y, z };
-								glm::ivec3 e = chunk_coord * (int)Chunk::EDGE_SIZE + glm::ivec3{ ex, ey, z };
-								glm::vec2 s = { ex - x, ey - y };
+								ivec3 p = chunk_coord * (int)Chunk::EDGE_SIZE + ivec3{ x, y, z };
+								ivec3 e = chunk_coord * (int)Chunk::EDGE_SIZE + ivec3{ ex, ey, z };
+								vec2 s = { ex - x, ey - y };
 								frame.add_quad({ e.x, p.y, p.z }, { p.x, p.y, p.z }, { p.x, e.y, p.z }, { e.x, e.y, p.z }, Color::CYAN, textures.find(ItemID::Dirt), { 0.0f, s.y }, { s.x, s.y }, { s.x, 0.0f }, { 0.0f, 0.0f });
 							}
 						}
@@ -384,9 +384,9 @@ void Chunk::on_render(Frame &frame, glm::ivec3 chunk_coord, TextureManager const
 									meshed[x2][y2] = true;
 
 							{
-								glm::ivec3 p = chunk_coord * (int)Chunk::EDGE_SIZE + glm::ivec3{ x, y, z+1 };
-								glm::ivec3 e = chunk_coord * (int)Chunk::EDGE_SIZE + glm::ivec3{ ex, ey, z+1 };
-								glm::vec2 s = { ex - x, ey - y };
+								ivec3 p = chunk_coord * (int)Chunk::EDGE_SIZE + ivec3{ x, y, z+1 };
+								ivec3 e = chunk_coord * (int)Chunk::EDGE_SIZE + ivec3{ ex, ey, z+1 };
+								vec2 s = { ex - x, ey - y };
 								frame.add_quad({ p.x, p.y, p.z }, { e.x, p.y, p.z }, { e.x, e.y, p.z }, { p.x, e.y, p.z }, Color::GREEN, textures.find(ItemID::Dirt), { 0.0f, s.y }, { s.x, s.y }, { s.x, 0.0f }, { 0.0f, 0.0f });
 							}
 						}
@@ -398,7 +398,7 @@ void Chunk::on_render(Frame &frame, glm::ivec3 chunk_coord, TextureManager const
 				for (int x = 0; x < EDGE_SIZE; ++x)
 					for (int y = 0; y < EDGE_SIZE; ++y)
 						for (int z = 0; z < EDGE_SIZE; ++z)
-							blocks[x][y][z].on_render(frame, chunk_coord * (int)Chunk::EDGE_SIZE + glm::ivec3{ x, y, z }, textures);
+							blocks[x][y][z].on_render(frame, chunk_coord * (int)Chunk::EDGE_SIZE + ivec3{ x, y, z }, textures);
 			}
 		});
 	}

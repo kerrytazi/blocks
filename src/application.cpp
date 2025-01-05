@@ -7,12 +7,14 @@
 #include "gfxengine/graphics.hpp"
 #include "gfxengine/frame.hpp"
 #include "gfxengine/window_event_handler.hpp"
+#include "gfxengine/noise_generator.hpp"
 
 #include <random>
 
 #if GFXENGINE_EDITOR
 #include "imgui.h"
 #endif // GFXENGINE_EDITOR
+
 
 class BlocksApplication : public Application, public WindowEventHandler
 {
@@ -22,14 +24,14 @@ private:
 
 	std::unique_ptr<Window> window;
 
-	int fps_limit = 120;
+	int fps_limit = 0;//120;
 
 	bool should_close = false;
 	bool mouse_locked = false;
 	bool speed_up = false;
 
-	glm::vec3 camera_pos{};
-	glm::vec3 camera_front{};
+	vec3 camera_pos{};
+	vec3 camera_front{};
 	float camera_fov = 90.0f;
 
 	InputController input_controller;
@@ -38,6 +40,7 @@ private:
 	int random_seed = 1337;
 	int random_count = 400;
 	std::mt19937 rng{ (uint32_t)random_seed };
+	std::unique_ptr<NoiseGenerator> world_gen = std::make_unique<NoiseGenerator>(random_seed);
 
 	World world;
 	TextureManager textures;
@@ -45,7 +48,7 @@ private:
 #if GFXENGINE_EDITOR
 	bool editor_demo_window = false;
 	bool editor_settings = true;
-	bool editor_fps = true;
+	bool editors = true;
 	bool editor_coord = true;
 	bool editor_stats = true;
 
@@ -54,7 +57,7 @@ private:
 	bool editor_gfx_depth = true;
 
 	bool editor_window_vsync = false;
-	int editor_window_fps_limit = fps_limit;
+	int editor_windows_limit = fps_limit;
 #endif // GFXENGINE_EDITOR
 
 	virtual void start() override
@@ -65,9 +68,10 @@ private:
 		window->set_vsync(false);
 #endif // GFXENGINE_EDITOR
 
-		world.init_random_chunks(rng, {-world_radius,-world_radius,-world_radius}, {world_radius,world_radius,world_radius}, random_count);
+		//world.init_random_chunks(rng, {-world_radius,-world_radius,-world_radius}, {world_radius,world_radius,world_radius}, random_count);
+		world.init(*world_gen, {-world_radius,-world_radius,-world_radius}, {world_radius,world_radius,world_radius});
 
-		textures.load(ItemID::Dirt, "dirt.png");
+		textures.load(ItemID::Dirt, "../data/images/dirt.png");
 		Frame frame;
 
 		while (true)
@@ -108,29 +112,95 @@ private:
 
 	void on_render(Frame &frame)
 	{
+		constexpr auto a = mat4::identity();
+		constexpr auto b = a * 2.0f;
+		constexpr auto c = b.inverse();
+		constexpr auto d = b * c;
+		//constexpr auto a = math::vec4(1,1,0,0).normalize();
+		//constexpr auto b1 = math::pow(4.0, 2.0);
+		//constexpr auto b2 = math::pow(4.0, 2.5);
+		//constexpr auto b3 = math::pow(4.0, 3.0);
+		//constexpr auto a2 = math::sqrt(4.0f);
+		//constexpr auto &ti = rtti::get_type_info<math::mat4>();
+		//auto &ti = rtti::get_type_info<math::vec3>();
+		//auto &ti = rtti::get_type_info<myvec3<float>>();
+		//auto &ti = rtti::get_type_info<Vertex>();
 		frame.setting_wireframe(editor_gfx_wireframe);
 		frame.setting_culling(editor_gfx_culling);
 		frame.setting_depth(editor_gfx_depth);
 
-		const glm::mat4 proj = glm::perspective(glm::radians(camera_fov), 1.0f, 0.01f, 1000.0f);
-		const glm::mat4 view = glm::lookAt(camera_pos, camera_pos + camera_front, glm::vec3(0, 1, 0));
-		const glm::mat4 model = glm::identity<glm::mat4>();
+		{
+			const mat4 proj = math::perspective(math::deg_to_rad(camera_fov), 1.0f, 0.01f, 1000.0f);
+			const mat4 view = math::look_at(camera_pos, camera_pos + camera_front, vec3::unit_y());
+			const mat4 model = mat4::identity();
 
-		auto _guard1 = frame.set_model_matrix(model);
-		auto _guard2 = frame.set_view_matrix(view);
-		auto _guard3 = frame.set_projection_matrix(proj);
+			auto _guard1 = frame.set_model_matrix(model);
+			auto _guard2 = frame.set_view_matrix(view);
+			auto _guard3 = frame.set_projection_matrix(proj);
 
-		frame.clear_background(Color(0.2f*255.0f, 0.3f*255.0f, 0.2f*255.0f, 1.0f*255.0f));
+			frame.clear_background(Color(0.2f*255.0f, 0.3f*255.0f, 0.2f*255.0f, 1.0f*255.0f));
 
-		world.on_render(frame, textures);
-		world.cache_graphics(window->get_graphics());
+			world.on_render(frame, textures);
+			world.cache_graphics(window->get_graphics());
+		}
+
+#if 0
+		{
+			static std::shared_ptr<Image> img = std::make_shared<Image>();
+			static std::unique_ptr<NoiseGenerator> gen1 = std::make_unique<NoiseGenerator>(0);
+
+			static bool once = true;
+			if (once)
+			{
+				once = false;
+
+				img->width = 2000;
+				img->height = 2000;
+				img->data.resize(img->width * img->height * 4);
+
+				for (int x = 0; x < img->width; ++x)
+				{
+					for (int y = 0; y < img->height; ++y)
+					{
+						int _x = x + input_controller.position.x * 100;
+						int _y = y + input_controller.position.y * 100;
+
+						uint8_t val = (
+							pow(gen1->noise(_x/400.0, _y/400.0) + 1.0, 2) / 4.0 * 1.00
+							) / 1.0 * 256;
+
+						/*
+						uint8_t val = (
+							((gen1->noise(_x/128.0, _y/128.0) + 1.0) / 2.0) * 1.50 +
+							((gen1->noise(_x/64.0, _y/64.0) + 1.0) / 2.0) * 1.00 +
+							((gen1->noise(_x/32.0, _y/32.0) + 1.0) / 2.0) * 0.50 +
+							((gen1->noise(_x/16.0, _y/16.0) + 1.0) / 2.0) * 0.25
+							) / 3.25 * 256;
+						*/
+
+						//uint8_t val = gen1->noise_scaled(x, y, 97)* 256;
+						//uint8_t val = std::uniform_int_distribution<uint32_t>(0, 255)(rng);
+						//uint8_t val = rand() * 255 / RAND_MAX;
+
+						img->data[(y * img->width + x) * 4 + 0] = val;
+						img->data[(y * img->width + x) * 4 + 1] = val;
+						img->data[(y * img->width + x) * 4 + 2] = val;
+						img->data[(y * img->width + x) * 4 + 3] = 255;
+					}
+				}
+			}
+
+			//frame.add_quad({ -0.5f, -0.5f, 0.0f }, { 0.5f, -0.5f, 0.0f }, { 0.5f, 0.5f, 0.0f }, { -0.5f, 0.5f, 0.0f }, Color::WHITE, img, { 0, 0 }, { 1, 0 }, { 1, 1 }, { 0, 1 });
+			frame.add_quad({ -1, -1, 0 }, { 1, -1, 0 }, { 1, 1, 0 }, { -1, 1, 0 }, Color::WHITE, img, { 0, 0 }, { 1, 0 }, { 1, 1 }, { 0, 1 });
+		}
+#endif // 0
 
 #if GFXENGINE_EDITOR
 		frame.on_draw_editor([this, &frame]() {
 
 			ImVec2 _pos{ 5, 5 };
 
-			if (editor_fps)
+			if (editors)
 			{
 				ImGui::Begin("FPS", nullptr, ImGuiWindowFlags_NoNav | ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoInputs | ImGuiWindowFlags_AlwaysAutoResize);
 
@@ -146,10 +216,10 @@ private:
 			{
 				ImGui::Begin("Coords", nullptr, ImGuiWindowFlags_NoNav | ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoInputs | ImGuiWindowFlags_AlwaysAutoResize);
 
-				glm::vec3 pos = input_controller.position;
-				glm::ivec3 chunk = glm::floor(pos / 16.0f);
-				glm::vec3 lpos = pos - glm::vec3(chunk) * 16.0f;
-				glm::vec2 rot = input_controller.rotation;
+				vec3 pos = input_controller.position;
+				ivec3 chunk = math::floor(pos / 16.0f);
+				vec3 lpos = pos - vec3(chunk) * 16.0f;
+				vec2 rot = input_controller.rotation;
 
 				ImGui::Text("pos   %6.2f %6.2f %6.2f", pos.x, pos.y, pos. z);
 				ImGui::Text("chunk %3d    %3d    %3d", chunk.x, chunk.y, chunk.z);
@@ -187,7 +257,7 @@ private:
 			{
 				ImGui::Begin("Settings", &editor_settings, ImGuiWindowFlags_NoNav | ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_AlwaysAutoResize);
 
-				ImGui::Checkbox("FPS", &editor_fps);
+				ImGui::Checkbox("FPS", &editors);
 				ImGui::Checkbox("Coords", &editor_coord);
 				ImGui::Checkbox("Stats", &editor_stats);
 				ImGui::Checkbox("Speed Up", &speed_up);
@@ -209,7 +279,8 @@ private:
 					else
 						rng.seed(random_seed);
 
-					world.init_random_chunks(rng, {-world_radius,-world_radius,-world_radius}, {world_radius,world_radius,world_radius}, random_count);
+					//world.init_random_chunks(rng, {-world_radius,-world_radius,-world_radius}, {world_radius,world_radius,world_radius}, random_count);
+					world.init(*world_gen, {-world_radius,-world_radius,-world_radius}, {world_radius,world_radius,world_radius});
 				}
 
 				if (ImGui::CollapsingHeader("Graphics"))
@@ -227,9 +298,9 @@ private:
 					}
 
 					ImGui::PushItemWidth(80);
-					ImGui::InputInt("FPS Limit", &editor_window_fps_limit, 0);
+					ImGui::InputInt("FPS Limit", &editor_windows_limit, 0);
 					if (ImGui::IsItemDeactivatedAfterEdit())
-						fps_limit = editor_window_fps_limit;
+						fps_limit = editor_windows_limit;
 					ImGui::PopItemWidth();
 				}
 
@@ -252,7 +323,7 @@ private:
 		if (event.type == KeyboardEvent::Type::Press && event.key == KeyboardEvent::Key::Z)
 		{
 			speed_up = !speed_up;
-			input_controller.change_speed(time, speed_up ? 16.0f : 4.0f);
+			input_controller.change_speed(time, speed_up ? 64.0f : 16.0f);
 		}
 
 #if GFXENGINE_EDITOR
@@ -303,9 +374,8 @@ private:
 	{
 		if (mouse_locked && event.locked && event.type == MouseEvent::Type::Move)
 		{
-			glm::vec2 rotation = event.pos;
-			std::swap(rotation.x, rotation.y); // y = pitch, x = yaw
-			input_controller.rotate_view(time, rotation);
+			vec2 rotation = event.pos;
+			input_controller.rotate_view(time, rotation._yx());
 		}
 
 		if (mouse_locked && event.locked && event.type == MouseEvent::Type::Scroll)
@@ -323,10 +393,11 @@ private:
 		if (mouse_locked && event.locked && event.type == MouseEvent::Type::Press && event.key == MouseEvent::Key::MMB)
 		{
 			camera_fov = 90.0f;
+			input_controller.change_rotation_sensitivity(time, 0.1f * camera_fov / 90.0f);
 		}
 	}
 
-	virtual void on_close_event(double time)
+	virtual void on_close_event(double time) override
 	{
 		should_close = true;
 	}
@@ -340,9 +411,9 @@ public:
 		params.window_event_handler = this;
 		window = platform.create_window(params);
 
-		input_controller.position = { -35.0f, -35.0f, -35.0f };
-		input_controller.rotation = { 45.0f, -315.0f };
-		input_controller.change_speed(0.0, 4.0f);
+		input_controller.position = { 0.0f, 40.0f, 0.0f };
+		input_controller.rotation = { -45.0f, 0.0f };
+		input_controller.change_speed(0.0, 16.0f);
 		input_controller.change_rotation_sensitivity(0.0, 0.1f);
 	}
 };

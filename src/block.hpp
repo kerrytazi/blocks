@@ -10,7 +10,7 @@ enum class ItemID : uint8_t
 	Dirt,
 };
 
-struct Graphics;
+class Graphics;
 
 struct RenderParams
 {
@@ -52,12 +52,12 @@ struct Cube
 	bool solid;
 	bool visible_faces[DIRECTION_MAX];
 
-	void on_render(Frame &frame, glm::ivec3 block_coord, TextureManager const &textures)
+	void on_render(Frame &frame, ivec3 block_coord, TextureManager const &textures)
 	{
 		if (!solid)
 			return;
 
-		glm::ivec3 p = block_coord;
+		ivec3 p = block_coord;
 
 		if (visible_faces[(int)Direction::Left])
 			frame.add_quad({ p.x    , p.y    , p.z     }, { p.x    , p.y    , p.z + 1 }, { p.x    , p.y + 1, p.z + 1 }, { p.x    , p.y + 1, p.z     }, Color::RED, textures.find(id), { 0.0f, 0.0f }, { 1.0f, 0.0f }, { 1.0f, 1.0f }, { 0.0f, 1.0f });     // Left
