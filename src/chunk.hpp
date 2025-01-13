@@ -11,14 +11,7 @@ struct Chunk
 	static const size_t EDGE_LAST = EDGE_SIZE - 1;
 	Cube blocks[EDGE_SIZE][EDGE_SIZE][EDGE_SIZE]{};
 
-	bool greedy_meshing = true;
-
-	bool graphics_cache_dirty = false;
-	std::shared_ptr<FrameCacheGraphicsCache> graphics_cache;
-	FrameCache render_cache = FrameCache::with_reserve(32 * 1024);
-
 	void refresh_visible_faces();
 	void hide_adjacent_chunk_faces(ivec3 delta, Chunk const &other);
-	void on_render(Frame &frame, ivec3 chunk_coord, TextureManager const &textures);
-	void cache_graphics(Graphics &graphics);
+	void on_render(Frame &frame, ivec3 chunk_coord, MaterialManager const &textures);
 };

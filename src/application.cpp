@@ -1,5 +1,6 @@
 #include "world.hpp"
 
+#include "gfxengine/material.hpp"
 #include "gfxengine/base_application.hpp"
 #include "gfxengine/input_controller.hpp"
 #include "gfxengine/platform.hpp"
@@ -8,6 +9,7 @@
 #include "gfxengine/frame.hpp"
 #include "gfxengine/window_event_handler.hpp"
 #include "gfxengine/noise_generator.hpp"
+#include "gfxengine/logger.hpp"
 
 #include <random>
 
@@ -15,16 +17,16 @@
 #include "imgui.h"
 #endif // GFXENGINE_EDITOR
 
-
 class BlocksApplication : public Application, public WindowEventHandler
 {
 private:
 
 	Platform &platform;
+	Logger logger;
 
 	std::unique_ptr<Window> window;
 
-	int fps_limit = 0;//120;
+	int fps_limit = 120;
 
 	bool should_close = false;
 	bool mouse_locked = false;
@@ -43,7 +45,7 @@ private:
 	std::unique_ptr<NoiseGenerator> world_gen = std::make_unique<NoiseGenerator>(random_seed);
 
 	World world;
-	TextureManager textures;
+	MaterialManager materials;
 
 #if GFXENGINE_EDITOR
 	bool editor_demo_window = false;
@@ -62,6 +64,62 @@ private:
 
 	virtual void start() override
 	{
+		{
+			auto params = CreateMaterialParams{};
+
+			params.attributes.add(ShaderFieldInfo{ "pos", ShaderFieldType::F32, false, 3 });
+			params.attributes.add(ShaderFieldInfo{ "tex_coord", ShaderFieldType::F32, false, 2 });
+			params.attributes.add(ShaderFieldInfo{ "tex_offset", ShaderFieldType::F32, false, 2 });
+
+			params.uniforms.add(ShaderFieldInfo{ "mvp", ShaderFieldType::Matrix4, false, 1 });
+			params.uniforms.add(ShaderFieldInfo{ "tex", ShaderFieldType::Texture, false, 1 });
+
+			params.vertex_shader = R"tag(
+#version 460 core
+
+in vec3 pos;
+in vec2 tex_coord;
+in vec2 tex_offset;
+
+uniform mat4 mvp;
+
+out vec4 v_color;
+out vec2 v_tex_coord;
+out vec2 v_tex_offset;
+
+void main()
+{
+	gl_Position = mvp * vec4(pos, 1.0);
+	v_tex_coord = tex_coord;
+	v_tex_offset = tex_offset;
+}
+)tag";
+
+			params.fragment_shader = R"tag(
+#version 460 core
+
+in vec4 v_color;
+in vec2 v_tex_coord;
+in vec2 v_tex_offset;
+
+out vec4 o_frag_color;
+
+uniform sampler2D tex;
+
+void main()
+{
+	o_frag_color = texture(tex, v_tex_offset + mod(v_tex_coord, 1.0));// * v_color;
+}
+)tag";
+			{
+				auto material = window->get_graphics().create_material(params);
+				auto img = std::make_shared<Image>(Image::load_sync("../data/images/dirt.png"));
+				material->uniforms[0] = mat4::identity();
+				material->uniforms[1] = ShaderFieldTexture_t{ std::move(img) };
+				materials.materials.insert({ ItemID::Dirt, std::move(material) });
+			}
+		}
+
 #if GFXENGINE_EDITOR
 		window->set_vsync(editor_window_vsync);
 #else
@@ -71,7 +129,6 @@ private:
 		//world.init_random_chunks(rng, {-world_radius,-world_radius,-world_radius}, {world_radius,world_radius,world_radius}, random_count);
 		world.init(*world_gen, {-world_radius,-world_radius,-world_radius}, {world_radius,world_radius,world_radius});
 
-		textures.load(ItemID::Dirt, "../data/images/dirt.png");
 		Frame frame;
 
 		while (true)
@@ -84,7 +141,7 @@ private:
 
 			on_update();
 
-			frame.clear();
+			frame.reset();
 			on_render(frame);
 			window->draw(frame);
 
@@ -112,19 +169,6 @@ private:
 
 	void on_render(Frame &frame)
 	{
-		constexpr auto a = mat4::identity();
-		constexpr auto b = a * 2.0f;
-		constexpr auto c = b.inverse();
-		constexpr auto d = b * c;
-		//constexpr auto a = math::vec4(1,1,0,0).normalize();
-		//constexpr auto b1 = math::pow(4.0, 2.0);
-		//constexpr auto b2 = math::pow(4.0, 2.5);
-		//constexpr auto b3 = math::pow(4.0, 3.0);
-		//constexpr auto a2 = math::sqrt(4.0f);
-		//constexpr auto &ti = rtti::get_type_info<math::mat4>();
-		//auto &ti = rtti::get_type_info<math::vec3>();
-		//auto &ti = rtti::get_type_info<myvec3<float>>();
-		//auto &ti = rtti::get_type_info<Vertex>();
 		frame.setting_wireframe(editor_gfx_wireframe);
 		frame.setting_culling(editor_gfx_culling);
 		frame.setting_depth(editor_gfx_depth);
@@ -133,15 +177,12 @@ private:
 			const mat4 proj = math::perspective(math::deg_to_rad(camera_fov), 1.0f, 0.01f, 1000.0f);
 			const mat4 view = math::look_at(camera_pos, camera_pos + camera_front, vec3::unit_y());
 			const mat4 model = mat4::identity();
+			const mat4 mvp = proj * view * model;
+			materials.find(ItemID::Dirt)->uniforms[0] = mvp;
 
-			auto _guard1 = frame.set_model_matrix(model);
-			auto _guard2 = frame.set_view_matrix(view);
-			auto _guard3 = frame.set_projection_matrix(proj);
+			frame.clear_background(ColorF(0.2f, 0.3f, 0.2f, 1.0f));
 
-			frame.clear_background(Color(0.2f*255.0f, 0.3f*255.0f, 0.2f*255.0f, 1.0f*255.0f));
-
-			world.on_render(frame, textures);
-			world.cache_graphics(window->get_graphics());
+			world.on_render(frame, materials);
 		}
 
 #if 0
@@ -221,10 +262,26 @@ private:
 				vec3 lpos = pos - vec3(chunk) * 16.0f;
 				vec2 rot = input_controller.rotation;
 
+				float angle = math::fmod(-rot.y + 22.5f, 360.0f);
+				if (angle < 0.0f)
+					angle += 360.0f;
+
+				char const *dir = nullptr;
+
+				if      (angle < 45.0f * 1) dir = " E +x  ";
+				else if (angle < 45.0f * 2) dir = "NE +x-z";
+				else if (angle < 45.0f * 3) dir = "N    -z";
+				else if (angle < 45.0f * 4) dir = "NW -x-z";
+				else if (angle < 45.0f * 5) dir = " W -x  ";
+				else if (angle < 45.0f * 6) dir = "SW -x+z";
+				else if (angle < 45.0f * 7) dir = "S    +z";
+				else if (angle < 45.0f * 8) dir = "SE +x+z";
+
 				ImGui::Text("pos   %6.2f %6.2f %6.2f", pos.x, pos.y, pos. z);
 				ImGui::Text("chunk %3d    %3d    %3d", chunk.x, chunk.y, chunk.z);
 				ImGui::Text("lpos  %6.2f %6.2f %6.2f", lpos.x, lpos.y, lpos.z);
 				ImGui::Text("rot   %6.2f %6.2f", rot.x, rot.y);
+				ImGui::Text("dir   %s", dir);
 
 				ImGui::SetWindowPos(_pos, ImGuiCond_Always);
 				_pos.y += ImGui::GetWindowSize().y + 5;
@@ -406,7 +463,12 @@ public:
 
 	BlocksApplication(Platform &platform)
 		: platform{ platform }
+		, logger{ platform }
 	{
+		logger.add_handler([this](char const *c_str, size_t len) {
+			this->platform.debug_output(c_str, len);
+		});
+
 		CreateWindowParams params{ platform };
 		params.window_event_handler = this;
 		window = platform.create_window(params);

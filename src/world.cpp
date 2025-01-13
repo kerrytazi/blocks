@@ -2,16 +2,10 @@
 
 #include "gfxengine/noise_generator.hpp"
 
-void World::on_render(Frame &frame, TextureManager const &textures)
+void World::on_render(Frame &frame, MaterialManager const &materials)
 {
 	for (auto &chunk : chunks)
-		chunk.second->on_render(frame, chunk.first, textures);
-}
-
-void World::cache_graphics(Graphics &graphics)
-{
-	for (auto &chunk : chunks)
-		chunk.second->cache_graphics(graphics);
+		chunk.second->on_render(frame, chunk.first, materials);
 }
 
 void World::init_random_chunks(std::mt19937 &rng, ivec3 from, ivec3 to, int count)
@@ -91,7 +85,7 @@ void World::init(NoiseGenerator const &gen, ivec3 from, ivec3 to)
 						) / 1.75;
 					int height = val * 15 + 1;
 
-					for (int _y = 0; _y < height; ++_y)
+					for (int _y = math::max(0, height - 5); _y < height; ++_y)
 					{
 						chunk->blocks[_x][_y][_z].solid = true;
 						chunk->blocks[_x][_y][_z].id = ItemID::Dirt;
