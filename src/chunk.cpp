@@ -2,6 +2,8 @@
 
 void Chunk::refresh_visible_faces()
 {
+	dirty = true;
+
 	for (int x = 0; x < EDGE_SIZE; ++x)
 	{
 		for (int y = 0; y < EDGE_SIZE; ++y)
@@ -39,6 +41,8 @@ void Chunk::refresh_visible_faces()
 
 void Chunk::hide_adjacent_chunk_faces(ivec3 delta, Chunk const &other)
 {
+	dirty = true;
+
 	if (delta.x < 0)
 	{
 		for (int y = 0; y < EDGE_SIZE; ++y)
@@ -88,7 +92,49 @@ void Chunk::hide_adjacent_chunk_faces(ivec3 delta, Chunk const &other)
 	}
 }
 
-void Chunk::on_render(Frame &frame, ivec3 chunk_coord, MaterialManager const &materials)
+void Chunk::on_render(RenderParams const &params)
+{
+	bool gpu_cache = true;
+	if (gpu_cache)
+	{
+		if (!render_cache_gpu)
+			render_cache_gpu = params.graphics.create_cache_vertices(params.materials.find(ItemID::Dirt));
+
+		if (dirty)
+		{
+			dirty = false;
+
+			FrameCacheVertices cache;
+
+			params.frame.cache(cache, [&]() {
+				on_render_no_cache(params);
+			});
+
+			render_cache_gpu->load(cache); // TODO
+		}
+
+		params.frame.add_cached_vertices(render_cache_gpu);
+	}
+	else
+	{
+		if (dirty)
+		{
+			dirty = false;
+			render_cache.clear();
+		}
+
+		if (render_cache.empty())
+		{
+			params.frame.cache(render_cache, [&]() {
+				on_render_no_cache(params);
+			});
+		}
+
+		params.frame.add_cached_vertices(params.materials.find(ItemID::Dirt), render_cache); // TODO: material in cache
+	}
+}
+
+void Chunk::on_render_no_cache(RenderParams const &params)
 {
 	bool greedy_meshing = true;
 	if (greedy_meshing)
@@ -134,16 +180,16 @@ void Chunk::on_render(Frame &frame, ivec3 chunk_coord, MaterialManager const &ma
 							meshed[z2][y2] = true;
 
 					{
-						ivec3 p = chunk_coord * (int)Chunk::EDGE_SIZE + ivec3{ x, y, z };
-						ivec3 e = chunk_coord * (int)Chunk::EDGE_SIZE + ivec3{ x, ey, ez };
+						ivec3 p = params.model_offset + ivec3{ x, y, z };
+						ivec3 e = params.model_offset + ivec3{ x, ey, ez };
 						vec2 s = { ez - z, ey - y };
 						vec2 c = { 0.0f, 0.0f };
 
-						frame.add_quad(materials.find(id),
-							BlockVertex{ { p.x, p.y, p.z }, { c.x, s.y }, { 0.0f, 0.0f } },
-							BlockVertex{ { p.x, p.y, e.z }, { s.x, s.y }, { 0.0f, 0.0f } },
-							BlockVertex{ { p.x, e.y, e.z }, { s.x, c.y }, { 0.0f, 0.0f } },
-							BlockVertex{ { p.x, e.y, p.z }, { c.x, c.y }, { 0.0f, 0.0f } }
+						params.frame.add_quad(params.materials.find(id),
+							BlockVertex{ { p.x, p.y, p.z }, -vec3::unit_x(), { c.x, s.y }, { 0.0f, 0.0f } },
+							BlockVertex{ { p.x, p.y, e.z }, -vec3::unit_x(), { s.x, s.y }, { 0.0f, 0.0f } },
+							BlockVertex{ { p.x, e.y, e.z }, -vec3::unit_x(), { s.x, c.y }, { 0.0f, 0.0f } },
+							BlockVertex{ { p.x, e.y, p.z }, -vec3::unit_x(), { c.x, c.y }, { 0.0f, 0.0f } }
 						);
 					}
 				}
@@ -191,16 +237,16 @@ void Chunk::on_render(Frame &frame, ivec3 chunk_coord, MaterialManager const &ma
 							meshed[z2][y2] = true;
 
 					{
-						ivec3 p = chunk_coord * (int)Chunk::EDGE_SIZE + ivec3{ x+1, y, z };
-						ivec3 e = chunk_coord * (int)Chunk::EDGE_SIZE + ivec3{ x+1, ey, ez };
+						ivec3 p = params.model_offset + ivec3{ x+1, y, z };
+						ivec3 e = params.model_offset + ivec3{ x+1, ey, ez };
 						vec2 s = { ez - z, ey - y };
 						vec2 c = { 0.0f, 0.0f };
 
-						frame.add_quad(materials.find(id),
-							BlockVertex{ { e.x, p.y, p.z }, { s.x, s.y }, { 0.0f, 0.0f } },
-							BlockVertex{ { e.x, e.y, p.z }, { s.x, c.y }, { 0.0f, 0.0f } },
-							BlockVertex{ { e.x, e.y, e.z }, { c.x, c.y }, { 0.0f, 0.0f } },
-							BlockVertex{ { e.x, p.y, e.z }, { c.x, s.y }, { 0.0f, 0.0f } }
+						params.frame.add_quad(params.materials.find(id),
+							BlockVertex{ { e.x, p.y, p.z },  vec3::unit_x(), { s.x, s.y }, { 0.0f, 0.0f } },
+							BlockVertex{ { e.x, e.y, p.z },  vec3::unit_x(), { s.x, c.y }, { 0.0f, 0.0f } },
+							BlockVertex{ { e.x, e.y, e.z },  vec3::unit_x(), { c.x, c.y }, { 0.0f, 0.0f } },
+							BlockVertex{ { e.x, p.y, e.z },  vec3::unit_x(), { c.x, s.y }, { 0.0f, 0.0f } }
 						);
 					}
 				}
@@ -248,16 +294,16 @@ void Chunk::on_render(Frame &frame, ivec3 chunk_coord, MaterialManager const &ma
 							meshed[x2][z2] = true;
 
 					{
-						ivec3 p = chunk_coord * (int)Chunk::EDGE_SIZE + ivec3{ x, y, z };
-						ivec3 e = chunk_coord * (int)Chunk::EDGE_SIZE + ivec3{ ex, y, ez };
+						ivec3 p = params.model_offset + ivec3{ x, y, z };
+						ivec3 e = params.model_offset + ivec3{ ex, y, ez };
 						vec2 s = { ex - x, ez - z };
 						vec2 c = { 0.0f, 0.0f };
 
-						frame.add_quad(materials.find(id),
-							BlockVertex{ { p.x, p.y, p.z }, { c.x, s.y }, { 0.0f, 0.0f } },
-							BlockVertex{ { e.x, p.y, p.z }, { s.x, s.y }, { 0.0f, 0.0f } },
-							BlockVertex{ { e.x, p.y, e.z }, { s.x, c.y }, { 0.0f, 0.0f } },
-							BlockVertex{ { p.x, p.y, e.z }, { c.x, c.y }, { 0.0f, 0.0f } }
+						params.frame.add_quad(params.materials.find(id),
+							BlockVertex{ { p.x, p.y, p.z }, -vec3::unit_y(), { c.x, s.y }, { 0.0f, 0.0f } },
+							BlockVertex{ { e.x, p.y, p.z }, -vec3::unit_y(), { s.x, s.y }, { 0.0f, 0.0f } },
+							BlockVertex{ { e.x, p.y, e.z }, -vec3::unit_y(), { s.x, c.y }, { 0.0f, 0.0f } },
+							BlockVertex{ { p.x, p.y, e.z }, -vec3::unit_y(), { c.x, c.y }, { 0.0f, 0.0f } }
 						);
 					}
 				}
@@ -305,16 +351,16 @@ void Chunk::on_render(Frame &frame, ivec3 chunk_coord, MaterialManager const &ma
 							meshed[x2][z2] = true;
 
 					{
-						ivec3 p = chunk_coord * (int)Chunk::EDGE_SIZE + ivec3{ x, y+1, z };
-						ivec3 e = chunk_coord * (int)Chunk::EDGE_SIZE + ivec3{ ex, y+1, ez };
+						ivec3 p = params.model_offset + ivec3{ x, y+1, z };
+						ivec3 e = params.model_offset + ivec3{ ex, y+1, ez };
 						vec2 s = { ex - x, ez - z };
 						vec2 c = { 0.0f, 0.0f };
 
-						frame.add_quad(materials.find(id),
-							BlockVertex{ { p.x, e.y, p.z }, { c.x, c.y }, { 0.0f, 0.0f } },
-							BlockVertex{ { p.x, e.y, e.z }, { c.x, s.y }, { 0.0f, 0.0f } },
-							BlockVertex{ { e.x, e.y, e.z }, { s.x, s.y }, { 0.0f, 0.0f } },
-							BlockVertex{ { e.x, e.y, p.z }, { s.x, c.y }, { 0.0f, 0.0f } }
+						params.frame.add_quad(params.materials.find(id),
+							BlockVertex{ { p.x, e.y, p.z },  vec3::unit_y(), { c.x, c.y }, { 0.0f, 0.0f } },
+							BlockVertex{ { p.x, e.y, e.z },  vec3::unit_y(), { c.x, s.y }, { 0.0f, 0.0f } },
+							BlockVertex{ { e.x, e.y, e.z },  vec3::unit_y(), { s.x, s.y }, { 0.0f, 0.0f } },
+							BlockVertex{ { e.x, e.y, p.z },  vec3::unit_y(), { s.x, c.y }, { 0.0f, 0.0f } }
 						);
 					}
 				}
@@ -362,16 +408,16 @@ void Chunk::on_render(Frame &frame, ivec3 chunk_coord, MaterialManager const &ma
 							meshed[x2][y2] = true;
 
 					{
-						ivec3 p = chunk_coord * (int)Chunk::EDGE_SIZE + ivec3{ x, y, z };
-						ivec3 e = chunk_coord * (int)Chunk::EDGE_SIZE + ivec3{ ex, ey, z };
+						ivec3 p = params.model_offset + ivec3{ x, y, z };
+						ivec3 e = params.model_offset + ivec3{ ex, ey, z };
 						vec2 s = { ex - x, ey - y };
 						vec2 c = { 0.0f, 0.0f };
 
-						frame.add_quad(materials.find(id),
-							BlockVertex{ { p.x, p.y, p.z }, { s.x, s.y }, { 0.0f, 0.0f } },
-							BlockVertex{ { p.x, e.y, p.z }, { s.x, c.y }, { 0.0f, 0.0f } },
-							BlockVertex{ { e.x, e.y, p.z }, { c.x, c.y }, { 0.0f, 0.0f } },
-							BlockVertex{ { e.x, p.y, p.z }, { c.x, s.y }, { 0.0f, 0.0f } }
+						params.frame.add_quad(params.materials.find(id),
+							BlockVertex{ { p.x, p.y, p.z }, -vec3::unit_z(), { s.x, s.y }, { 0.0f, 0.0f } },
+							BlockVertex{ { p.x, e.y, p.z }, -vec3::unit_z(), { s.x, c.y }, { 0.0f, 0.0f } },
+							BlockVertex{ { e.x, e.y, p.z }, -vec3::unit_z(), { c.x, c.y }, { 0.0f, 0.0f } },
+							BlockVertex{ { e.x, p.y, p.z }, -vec3::unit_z(), { c.x, s.y }, { 0.0f, 0.0f } }
 						);
 					}
 				}
@@ -419,16 +465,16 @@ void Chunk::on_render(Frame &frame, ivec3 chunk_coord, MaterialManager const &ma
 							meshed[x2][y2] = true;
 
 					{
-						ivec3 p = chunk_coord * (int)Chunk::EDGE_SIZE + ivec3{ x, y, z+1 };
-						ivec3 e = chunk_coord * (int)Chunk::EDGE_SIZE + ivec3{ ex, ey, z+1 };
+						ivec3 p = params.model_offset + ivec3{ x, y, z+1 };
+						ivec3 e = params.model_offset + ivec3{ ex, ey, z+1 };
 						vec2 s = { ex - x, ey - y };
 						vec2 c = { 0.0f, 0.0f };
 
-						frame.add_quad(materials.find(id),
-							BlockVertex{ { p.x, p.y, e.z }, { c.x, s.y }, { 0.0f, 0.0f } },
-							BlockVertex{ { e.x, p.y, e.z }, { s.x, s.y }, { 0.0f, 0.0f } },
-							BlockVertex{ { e.x, e.y, e.z }, { s.x, c.y }, { 0.0f, 0.0f } },
-							BlockVertex{ { p.x, e.y, e.z }, { c.x, c.y }, { 0.0f, 0.0f } }
+						params.frame.add_quad(params.materials.find(id),
+							BlockVertex{ { p.x, p.y, e.z },  vec3::unit_z(), { c.x, s.y }, { 0.0f, 0.0f } },
+							BlockVertex{ { e.x, p.y, e.z },  vec3::unit_z(), { s.x, s.y }, { 0.0f, 0.0f } },
+							BlockVertex{ { e.x, e.y, e.z },  vec3::unit_z(), { s.x, c.y }, { 0.0f, 0.0f } },
+							BlockVertex{ { p.x, e.y, e.z },  vec3::unit_z(), { c.x, c.y }, { 0.0f, 0.0f } }
 						);
 					}
 				}
@@ -440,6 +486,6 @@ void Chunk::on_render(Frame &frame, ivec3 chunk_coord, MaterialManager const &ma
 		for (int x = 0; x < EDGE_SIZE; ++x)
 			for (int y = 0; y < EDGE_SIZE; ++y)
 				for (int z = 0; z < EDGE_SIZE; ++z)
-					blocks[x][y][z].on_render(frame, chunk_coord * (int)Chunk::EDGE_SIZE + ivec3{ x, y, z }, materials);
+					blocks[x][y][z].on_render(params.add_offset({ x, y, z }));
 	}
 }

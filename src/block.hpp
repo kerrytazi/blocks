@@ -15,6 +15,7 @@ enum class ItemID : uint8_t
 struct BlockVertex
 {
 	vec3 pos;
+	vec3 normal;
 	vec2 tex_coord;
 	vec2 tex_offset;
 };
@@ -44,11 +45,26 @@ enum class Direction : uint8_t
 
 static inline const size_t DIRECTION_MAX = 6;
 
+struct RenderParams
+{
+	Frame &frame;
+	MaterialManager const &materials;
+	Graphics &graphics;
+	ivec3 model_offset;
+
+	RenderParams add_offset(ivec3 offset) const
+	{
+		RenderParams result(*this);
+		result.model_offset += offset;
+		return result;
+	}
+};
+
 struct Cube
 {
 	ItemID id;
 	bool solid;
 	bool visible_faces[DIRECTION_MAX];
 
-	void on_render(Frame &frame, ivec3 block_coord, MaterialManager const &materials);
+	void on_render(RenderParams const &params);
 };

@@ -2,10 +2,10 @@
 
 #include "gfxengine/noise_generator.hpp"
 
-void World::on_render(Frame &frame, MaterialManager const &materials)
+void World::on_render(RenderParams const &params)
 {
 	for (auto &chunk : chunks)
-		chunk.second->on_render(frame, chunk.first, materials);
+		chunk.second->on_render(params.add_offset(chunk.first * Chunk::EDGE_SIZE));
 }
 
 void World::init_random_chunks(std::mt19937 &rng, ivec3 from, ivec3 to, int count)

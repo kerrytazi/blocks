@@ -1,7 +1,6 @@
 #include "world.hpp"
 
 #include "gfxengine/material.hpp"
-#include "gfxengine/base_application.hpp"
 #include "gfxengine/input_controller.hpp"
 #include "gfxengine/platform.hpp"
 #include "gfxengine/window.hpp"
@@ -17,7 +16,7 @@
 #include "imgui.h"
 #endif // GFXENGINE_EDITOR
 
-class BlocksApplication : public Application, public WindowEventHandler
+class BlocksApplication : public WindowEventHandler
 {
 private:
 
@@ -30,10 +29,12 @@ private:
 
 	bool should_close = false;
 	bool mouse_locked = false;
+	bool fullscreen_enabled = false;
 	bool speed_up = false;
 
-	vec3 camera_pos{};
-	vec3 camera_front{};
+	ivec2 render_size{};
+	float render_scale = 1.0f;
+
 	float camera_fov = 90.0f;
 
 	InputController input_controller;
@@ -62,109 +63,10 @@ private:
 	int editor_windows_limit = fps_limit;
 #endif // GFXENGINE_EDITOR
 
-	virtual void start() override
-	{
-		{
-			auto params = CreateMaterialParams{};
-
-			params.attributes.add(ShaderFieldInfo{ "pos", ShaderFieldType::F32, false, 3 });
-			params.attributes.add(ShaderFieldInfo{ "tex_coord", ShaderFieldType::F32, false, 2 });
-			params.attributes.add(ShaderFieldInfo{ "tex_offset", ShaderFieldType::F32, false, 2 });
-
-			params.uniforms.add(ShaderFieldInfo{ "mvp", ShaderFieldType::Matrix4, false, 1 });
-			params.uniforms.add(ShaderFieldInfo{ "tex", ShaderFieldType::Texture, false, 1 });
-
-			params.vertex_shader = R"tag(
-#version 460 core
-
-in vec3 pos;
-in vec2 tex_coord;
-in vec2 tex_offset;
-
-uniform mat4 mvp;
-
-out vec4 v_color;
-out vec2 v_tex_coord;
-out vec2 v_tex_offset;
-
-void main()
-{
-	gl_Position = mvp * vec4(pos, 1.0);
-	v_tex_coord = tex_coord;
-	v_tex_offset = tex_offset;
-}
-)tag";
-
-			params.fragment_shader = R"tag(
-#version 460 core
-
-in vec4 v_color;
-in vec2 v_tex_coord;
-in vec2 v_tex_offset;
-
-out vec4 o_frag_color;
-
-uniform sampler2D tex;
-
-void main()
-{
-	o_frag_color = texture(tex, v_tex_offset + mod(v_tex_coord, 1.0));// * v_color;
-}
-)tag";
-			{
-				auto material = window->get_graphics().create_material(params);
-				auto img = std::make_shared<Image>(Image::load_sync("../data/images/dirt.png"));
-				material->uniforms[0] = mat4::identity();
-				material->uniforms[1] = ShaderFieldTexture_t{ std::move(img) };
-				materials.materials.insert({ ItemID::Dirt, std::move(material) });
-			}
-		}
-
-#if GFXENGINE_EDITOR
-		window->set_vsync(editor_window_vsync);
-#else
-		window->set_vsync(false);
-#endif // GFXENGINE_EDITOR
-
-		//world.init_random_chunks(rng, {-world_radius,-world_radius,-world_radius}, {world_radius,world_radius,world_radius}, random_count);
-		world.init(*world_gen, {-world_radius,-world_radius,-world_radius}, {world_radius,world_radius,world_radius});
-
-		Frame frame;
-
-		while (true)
-		{
-			auto t1 = platform.get_time();
-			window->poll_events();
-
-			if (should_close)
-				return;
-
-			on_update();
-
-			frame.reset();
-			on_render(frame);
-			window->draw(frame);
-
-			auto t2 = platform.get_time();
-
-			if (fps_limit != 0)
-			{
-				double max_frame_time = 1.0 / fps_limit;
-				double delta = t2 - t1 + 0.0002;
-
-				if (max_frame_time > delta)
-					platform.sleep(max_frame_time - delta);
-			}
-		}
-	}
-
 	void on_update()
 	{
 		const double time = platform.get_time();
-
 		input_controller.update_all(time);
-		camera_pos = input_controller.position;
-		camera_front = input_controller.calc_front_direction();
 	}
 
 	void on_render(Frame &frame)
@@ -174,67 +76,26 @@ void main()
 		frame.setting_depth(editor_gfx_depth);
 
 		{
-			const mat4 proj = math::perspective(math::deg_to_rad(camera_fov), 1.0f, 0.01f, 1000.0f);
+			vec3 camera_pos = input_controller.position;
+			vec3 camera_front = input_controller.calc_front_direction();
+
+			const mat4 proj = math::perspective(math::deg_to_rad(camera_fov), float(render_size.x) / float(render_size.y), 0.01f, 1000.0f);
 			const mat4 view = math::look_at(camera_pos, camera_pos + camera_front, vec3::unit_y());
 			const mat4 model = mat4::identity();
 			const mat4 mvp = proj * view * model;
 			materials.find(ItemID::Dirt)->uniforms[0] = mvp;
+			materials.find(ItemID::Dirt)->uniforms[3] = camera_pos;
 
 			frame.clear_background(ColorF(0.2f, 0.3f, 0.2f, 1.0f));
 
-			world.on_render(frame, materials);
+			RenderParams params{
+				.frame = frame,
+				.materials = materials,
+				.graphics = window->get_graphics(),
+				.model_offset = ivec3{},
+			};
+			world.on_render(params);
 		}
-
-#if 0
-		{
-			static std::shared_ptr<Image> img = std::make_shared<Image>();
-			static std::unique_ptr<NoiseGenerator> gen1 = std::make_unique<NoiseGenerator>(0);
-
-			static bool once = true;
-			if (once)
-			{
-				once = false;
-
-				img->width = 2000;
-				img->height = 2000;
-				img->data.resize(img->width * img->height * 4);
-
-				for (int x = 0; x < img->width; ++x)
-				{
-					for (int y = 0; y < img->height; ++y)
-					{
-						int _x = x + input_controller.position.x * 100;
-						int _y = y + input_controller.position.y * 100;
-
-						uint8_t val = (
-							pow(gen1->noise(_x/400.0, _y/400.0) + 1.0, 2) / 4.0 * 1.00
-							) / 1.0 * 256;
-
-						/*
-						uint8_t val = (
-							((gen1->noise(_x/128.0, _y/128.0) + 1.0) / 2.0) * 1.50 +
-							((gen1->noise(_x/64.0, _y/64.0) + 1.0) / 2.0) * 1.00 +
-							((gen1->noise(_x/32.0, _y/32.0) + 1.0) / 2.0) * 0.50 +
-							((gen1->noise(_x/16.0, _y/16.0) + 1.0) / 2.0) * 0.25
-							) / 3.25 * 256;
-						*/
-
-						//uint8_t val = gen1->noise_scaled(x, y, 97)* 256;
-						//uint8_t val = std::uniform_int_distribution<uint32_t>(0, 255)(rng);
-						//uint8_t val = rand() * 255 / RAND_MAX;
-
-						img->data[(y * img->width + x) * 4 + 0] = val;
-						img->data[(y * img->width + x) * 4 + 1] = val;
-						img->data[(y * img->width + x) * 4 + 2] = val;
-						img->data[(y * img->width + x) * 4 + 3] = 255;
-					}
-				}
-			}
-
-			//frame.add_quad({ -0.5f, -0.5f, 0.0f }, { 0.5f, -0.5f, 0.0f }, { 0.5f, 0.5f, 0.0f }, { -0.5f, 0.5f, 0.0f }, Color::WHITE, img, { 0, 0 }, { 1, 0 }, { 1, 1 }, { 0, 1 });
-			frame.add_quad({ -1, -1, 0 }, { 1, -1, 0 }, { 1, 1, 0 }, { -1, 1, 0 }, Color::WHITE, img, { 0, 0 }, { 1, 0 }, { 1, 1 }, { 0, 1 });
-		}
-#endif // 0
 
 #if GFXENGINE_EDITOR
 		frame.on_draw_editor([this, &frame]() {
@@ -295,7 +156,6 @@ void main()
 				ImGui::Begin("Frame Stats", nullptr, ImGuiWindowFlags_NoNav | ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoInputs | ImGuiWindowFlags_AlwaysAutoResize);
 
 				ImGui::Text("draw calls:      %7d", (int)stats.draw_calls);
-				ImGui::Text("api calls:       %7d", (int)stats.api_calls);
 
 				ImGui::Text("vertices:        %7d", (int)stats.vertices);
 				ImGui::Text("indices:         %7d", (int)stats.indices);
@@ -345,6 +205,12 @@ void main()
 					ImGui::Checkbox("Wireframe", &editor_gfx_wireframe);
 					ImGui::Checkbox("Culling", &editor_gfx_culling);
 					ImGui::Checkbox("Depth Test", &editor_gfx_depth);
+
+					ImGui::PushItemWidth(80);
+					ImGui::InputFloat("Render Scale", &render_scale);
+					if (ImGui::IsItemDeactivatedAfterEdit())
+						window->get_graphics().resize(render_size, render_scale);
+					ImGui::PopItemWidth();
 				}
 
 				if (ImGui::CollapsingHeader("Window"))
@@ -352,6 +218,11 @@ void main()
 					if (ImGui::Checkbox("vsync", &editor_window_vsync))
 					{
 						window->set_vsync(editor_window_vsync);
+					}
+
+					if (ImGui::Checkbox("fullscreen", &fullscreen_enabled))
+					{
+						window->fullscreen(fullscreen_enabled);
 					}
 
 					ImGui::PushItemWidth(80);
@@ -409,7 +280,7 @@ void main()
 			};
 
 			KeyDir key_dirs[] {
-				{ KeyboardEvent::Key::W, InputController::Direction::Forward },
+				{ KeyboardEvent::Key::W, InputController::Direction::Front },
 				{ KeyboardEvent::Key::S, InputController::Direction::Back },
 				{ KeyboardEvent::Key::D, InputController::Direction::Right },
 				{ KeyboardEvent::Key::A, InputController::Direction::Left },
@@ -454,7 +325,19 @@ void main()
 		}
 	}
 
-	virtual void on_close_event(double time) override
+	virtual void on_mouse_external_unlock(double time, MouseExternalUnlockEvent event) override
+	{
+		mouse_locked = false;
+		input_controller.stop_all(time);
+	}
+
+	virtual void on_resize(double time, ResizeEvent event) override
+	{
+		render_size = event.new_size;
+		window->get_graphics().resize(render_size, render_scale);
+	}
+
+	virtual void on_close_event(double time, CloseEvent event) override
 	{
 		should_close = true;
 	}
@@ -466,7 +349,7 @@ public:
 		, logger{ platform }
 	{
 		logger.add_handler([this](char const *c_str, size_t len) {
-			this->platform.debug_output(c_str, len);
+			this->platform.debug_log(c_str, len);
 		});
 
 		CreateWindowParams params{ platform };
@@ -477,10 +360,128 @@ public:
 		input_controller.rotation = { -45.0f, 0.0f };
 		input_controller.change_speed(0.0, 16.0f);
 		input_controller.change_rotation_sensitivity(0.0, 0.1f);
+
+		{
+			auto params = CreateMaterialParams{};
+
+			params.attributes.add(ShaderFieldInfo{ "pos", ShaderFieldType::F32, false, 3 });
+			params.attributes.add(ShaderFieldInfo{ "normal", ShaderFieldType::F32, false, 3 });
+			params.attributes.add(ShaderFieldInfo{ "tex_coord", ShaderFieldType::F32, false, 2 });
+			params.attributes.add(ShaderFieldInfo{ "tex_offset", ShaderFieldType::F32, false, 2 });
+
+			params.uniforms.add(ShaderFieldInfo{ "mvp", ShaderFieldType::Matrix4, false, 1 });
+			params.uniforms.add(ShaderFieldInfo{ "tex", ShaderFieldType::Texture, false, 1 });
+			params.uniforms.add(ShaderFieldInfo{ "light_pos", ShaderFieldType::Vec3, false, 1 });
+			params.uniforms.add(ShaderFieldInfo{ "camera_pos", ShaderFieldType::Vec3, false, 1 });
+
+			params.vertex_shader = R"tag(
+#version 460 core
+
+in vec3 pos;
+in vec3 normal;
+in vec2 tex_coord;
+in vec2 tex_offset;
+
+uniform mat4 mvp;
+
+out vec3 v_pos;
+out vec3 v_normal;
+out vec2 v_tex_coord;
+out vec2 v_tex_offset;
+
+void main()
+{
+	gl_Position = mvp * vec4(pos, 1.0);
+	v_pos = pos;
+	v_normal = normal;
+	v_tex_coord = tex_coord;
+	v_tex_offset = tex_offset;
+}
+)tag";
+
+			params.fragment_shader = R"tag(
+#version 460 core
+
+in vec3 v_pos;
+in vec3 v_normal;
+in vec2 v_tex_coord;
+in vec2 v_tex_offset;
+
+out vec4 o_frag_color;
+
+uniform sampler2D tex;
+uniform vec3 light_pos;
+uniform vec3 camera_pos;
+
+void main()
+{
+	vec3 light_dir = normalize(light_pos - v_pos);
+	// vec3 view_dir = normalize(camera_pos - v_pos);
+	// vec3 reflect_dir = reflect(-light_dir, v_normal);
+	// float spec = pow(max(dot(view_dir, reflect_dir), 0.0), 1) * 0.5;
+	// vec3 specular = vec3(spec, spec, spec);
+	float diff = min(max(dot(v_normal, light_dir), 0.0) + 0.4, 1.0);
+	vec4 obj_color = textureGrad(tex, v_tex_offset + fract(v_tex_coord), dFdx(v_tex_coord), dFdy(v_tex_coord));
+	// o_frag_color = vec4((diff + specular) * obj_color.xyz, obj_color.w);
+	// o_frag_color = vec4(pow(diff * obj_color.xyz, vec3(1.0/2.2)), obj_color.w);
+	o_frag_color = vec4(diff * obj_color.xyz, obj_color.w);
+}
+)tag";
+			{
+				auto material = window->get_graphics().create_material(params);
+				auto img = std::make_shared<Image>(Image::load_sync("../data/images/dirt.png"));
+				material->uniforms[0] = mat4::identity();
+				material->uniforms[1] = ShaderFieldTexture_t{ std::move(img) };
+				material->uniforms[2] = vec3{ 100.0f, 300.0f, 100.0f };
+				material->uniforms[3] = input_controller.position;
+				materials.materials.insert({ ItemID::Dirt, std::move(material) });
+			}
+		}
+
+#if GFXENGINE_EDITOR
+		window->set_vsync(editor_window_vsync);
+#else
+		window->set_vsync(false);
+#endif // GFXENGINE_EDITOR
+
+		//world.init_random_chunks(rng, {-world_radius,-world_radius,-world_radius}, {world_radius,world_radius,world_radius}, random_count);
+		world.init(*world_gen, {-world_radius,-world_radius,-world_radius}, {world_radius,world_radius,world_radius});
+	}
+
+	void run_app()
+	{
+		Frame frame;
+
+		while (true)
+		{
+			auto t1 = platform.get_time();
+			window->poll_events();
+
+			if (should_close)
+				return;
+
+			on_update();
+
+			frame.reset();
+			on_render(frame);
+			window->draw(frame);
+
+			auto t2 = platform.get_time();
+
+			if (fps_limit != 0)
+			{
+				double max_frame_time = 1.0 / fps_limit;
+				double delta = t2 - t1 + 0.0003;
+
+				if (max_frame_time > delta)
+					platform.sleep(max_frame_time - delta);
+			}
+		}
 	}
 };
 
-std::unique_ptr<Application> create_application(Platform &platform)
+void run_app(Platform &platform)
 {
-	return std::make_unique<BlocksApplication>(platform);
+	auto app = std::make_unique<BlocksApplication>(platform);
+	app->run_app();
 }
